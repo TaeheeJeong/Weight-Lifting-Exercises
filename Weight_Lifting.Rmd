@@ -1,0 +1,135 @@
+---
+title: "Weight Lifting Exercises"
+author: "Taehee Jeong"
+date: "Oct 03, 2016"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+### Practical Machine Learning Course Project
+This assigment is Course Project for Practical Machine Learning. 
+
+The data set is Weight Lifting Exercises Dataset, which is a part of Human Activity Recognition.  
+
+Read more: http://groupware.les.inf.puc-rio.br/har.
+
+## Title
+Qualitative activity recognition for Weight Lifting Exercises
+
+## synopsis
+The goal of this project is to predict the manner in which participants did the exercise. This is the "classes" variable in the training data set. 
+
+1. How to build the model
+
+At begining I tried to use one vs all logistic regression model since it works well in numerical Exploaratory variables. However, I could not find any R package to support this. It seems that glm with family=binomial(link="logit") is avaiable, but the accuarcy with traing data is only 16%. 
+So I moved to decision tree based models, which are randomForest, boosted tree, and ada boosting. But these are too slow. it takes more than 30 minutes to compute on training data (14718 observations) for each model. 
+So I moved to model based predictions, such as linear discriminant analysis and Naive Bayes, and Recursive partitioning for classification.
+I compared accuarcy with training data and validation data to find out which model shows the highest accuracy. 
+
+2. How to use cross validation
+
+Since the size of training data is large as 19622 observation, I separate them as train data (3/4) and validation data (1/4).
+
+3. The expected output of sample error
+
+Accuracy of lda model on testing data is 0.708. that of rpart is 0.498.
+Accuracy of lda model on validation data is 0.689. that of rpart is 0.486.
+
+
+## summary
+Using the 52 variables (non-NA), classe was predicted on the 20 test cases based on LDA model. The accuracy is expected about 70%.
+The PCA plot shows that the 5 classes are overlapped each other.
+
+## Data Processing (Loading and preprocessing the data)
+
+```{r loading data}
+setwd("C:/Bigdata/Data Science Specalization/Practical Machine Learning/course_project")
+training <- read.csv("pml-training.csv")
+testing <- read.csv("pml-testing.csv")
+#str(training)
+#training <- read.csv("training.csv",na.strings = c("NA","#DIV/0!",""))
+#testing <- read.csv("testing.csv",na.strings = c("NA","#DIV/0!",""))
+
+# remove columns with NA
+test_clean<- Filter(function(x) !all(is.na(x)), testing)
+# remove unnecessary columns
+library(dplyr)
+test_clean <- select(test_clean,-(X:num_window) )
+test_clean <- select(test_clean,-problem_id)
+test_list<-names(test_clean)
+
+# select same column names with testing data 
+train_clean<- select(training,one_of(test_list))
+
+# add target variable to train_clean dataset
+train_clean$classe <- training$classe
+#is.factor(train_clean$classe)
+
+# separate train and validation data set from train_clean
+library(caret);library(lattice);library(ggplot2)
+inTrain<- createDataPartition(y=train_clean$classe,p=3/4,list=FALSE)
+train_data <-train_clean[inTrain,]
+validation_data<-train_clean[-inTrain,]
+```
+
+## Buidling classification models
+```{r model}
+library(MASS) # for lda(linear discriminant analysis)
+mod_lda <- train(classe~.,method="lda",data=train_data)
+library(rpart)
+# Recursive partitioning for classification
+mod_rpart <- train(classe~.,method="rpart",data=train_data)
+
+```
+
+## Predict on train data set
+```{r predict_train}
+pred_lda_train<-predict(mod_lda,train_data)
+pred_rpart_train<-predict(mod_rpart,train_data)
+
+```
+
+## Evaluate on train data set
+```{r evaluate_train }
+# accuracy based on model of lda (linear discriminat analysis)
+sum(pred_lda_train==train_data$classe)/nrow(train_data)
+
+# accuracy based on model of rpart (Recursive partitioning)
+sum(pred_rpart_train==train_data$classe)/nrow(train_data)
+
+```
+
+## Predict on validation data set
+```{r predict_validation}
+pred_lda_validation<-predict(mod_lda,validation_data)
+pred_rpart_validation<-predict(mod_rpart,validation_data)
+
+```
+
+## Evaluate on validation data set
+```{r evaluate_validation }
+# accuracy based on model of lda (linear discriminat analysis)
+sum(pred_lda_validation==validation_data$classe)/nrow(validation_data)
+
+# accuracy based on model of rpart (Recursive partitioning)
+sum(pred_rpart_validation==validation_data$classe)/nrow(validation_data)
+
+```
+
+## Predict on test data set
+```{r predict_test}
+pred_lda_test<-predict(mod_lda,test_clean)
+pred_rpart_test<-predict(mod_rpart,test_clean)
+table(pred_lda_test,pred_rpart_test)
+print(pred_lda_test)
+```
+
+## PCA
+```{r pca}
+preProc<- preProcess(train_data[,-53]+1,method="pca",praComp=2)
+trainPC<-predict(preProc,train_data[,-53]+1)
+qplot(trainPC[,1],trainPC[,2],col=train_data$classe,xlab="PC1",ylab="PC2",main="Principal component analysis on train data") 
+```
